@@ -1,0 +1,30 @@
+# ===== STM32CubeIDE =====
+Debug/
+Release/
+*.elf
+*.map
+*.bin
+*.hex
+*.o
+*.d
+*.su
+
+# ===== CubeIDE metadata =====
+.settings/
+*.launch
+
+# ===== X-CUBE-AI genererat =====
+X-CUBE-AI/build/
+X-CUBE-AI/target/*.o
+
+# ===== OS / Editor =====
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
