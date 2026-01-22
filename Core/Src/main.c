@@ -219,10 +219,7 @@ int main(void)
 	          if (sample_idx >= CNN_TIMESTEPS)
 	          {
 	              convert_to_mg();
-/*	              printf("MG[0]: %.2f %.2f %.2f\r\n",
-	                     ax_mg_buf[0],
-	                     ay_mg_buf[0],
-	                     az_mg_buf[0]);*/
+
 
 	              for (int i = 0; i < CNN_TIMESTEPS; i++) {
 
@@ -243,7 +240,19 @@ int main(void)
 	              latency_ms = (float)(end_cycles - start_cycles)
 	                           / 80000000.0f * 1000.0f;
 
-	              HAL_Delay(50);
+	              static uint32_t inf_count = 0;
+	              static uint32_t t0 = 0;
+
+	                  if (t0 == 0) {
+	                      t0 = HAL_GetTick();
+	                  }
+
+	                  inf_count++;
+
+	                  if (HAL_GetTick() - t0 >= 1000) {
+	                      printf("Throughout: %lu inf/s\r\n", inf_count);
+	                      inf_count = 0;
+	                      t0 = HAL_GetTick();
 
 	              int stride = CNN_TIMESTEPS / 2;
 
@@ -260,7 +269,6 @@ int main(void)
     /* USER CODE END WHILE */
 
 
-	  //MX_X_CUBE_AI_Process();
     /* USER CODE BEGIN 3 */
 
 	          }
@@ -1017,7 +1025,7 @@ static int32_t platform_write(
         HAL_MAX_DELAY) == HAL_OK) ? 0 : -1;
 }
 
-// Denna funktion anropas av drivrutinen för att läsa från sensorn
+// Anropas av drivrutinen för att läsa från sensorn
 static int32_t platform_read(
     void *handle,
     uint8_t reg,

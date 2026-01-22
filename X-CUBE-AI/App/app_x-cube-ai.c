@@ -215,7 +215,6 @@ int post_process(ai_buffer *buffer)
 	    }
 	  }
 
-	  //printf(" ");
 	  const char *labels[] = {"LYING", "STANDING", "MOVING"};
 	  printf("AI Prediktion: %s (%.2f%%)\r\n", labels[class_idx], max_prob * 100.0f);
 
