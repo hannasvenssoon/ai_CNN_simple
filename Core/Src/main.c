@@ -43,6 +43,7 @@
 #define CNN_CHANNELS 3
 #define ISM330DHCX_ADDR  (0x6B << 1)
 #define SMOOTH_N 5
+#define RX_BUF_SIZE 64 //UART receive buffer size
 //#define WINDOW_SIZE 1665
 //#define N_FEATURES 15
 
@@ -78,6 +79,14 @@ uint8_t whoamI;
 int16_t data_raw_acceleration[3]; // Buffert för rådata
 static int pred_hist[SMOOTH_N];
 static int pred_idx = 0;
+static volatile uint8_t logging_enabled = 0;  //Set when receiving start command
+char current_label[16] = "None";
+static uint8_t uart_rx_char;
+static char uart_rx_buf[RX_BUF_SIZE]; //UART receive buffer
+static uint8_t uart_rx_idx = 0;
+uint64_t inference_sample_index = 0;
+//uint8_t ai_output_enabled = 0;
+//volatile uint8_t uart_tx_busy = 0;
 
 static int16_t ax_raw_buf[CNN_TIMESTEPS];
 static int16_t ay_raw_buf[CNN_TIMESTEPS];
@@ -123,16 +132,20 @@ void convert_to_mg(void);
 static int32_t platform_write(void *handle, uint8_t reg,uint8_t *buf, uint16_t len);
 static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len);
 int smooth_prediction(int pred);
+void HandleUartCommand(const char *cmd);
+static void ResetInferenceState(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 int __io_putchar(int ch)
 {
-    HAL_UART_Transmit(&huart1, (uint8_t*)&ch, 1, HAL_MAX_DELAY);
+    //uart_tx_busy = 1;
+    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+    //uart_tx_busy = 0;
     return ch;
 }
-
 /* USER CODE END 0 */
 
 /**
@@ -184,6 +197,9 @@ int main(void)
   dev_ctx.read_reg = platform_read;
   dev_ctx.handle = &hi2c2;
 
+  //Enable UART receive commands (START & STOP from UI)
+  HAL_UART_Receive_IT(&huart1, &uart_rx_char, 1);
+
   HAL_Delay(20);
 
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
@@ -205,77 +221,68 @@ int main(void)
    MX_X_CUBE_AI_Init();
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-	  int16_t data_raw_acceleration[3];
-	      // Läs rådata från sensorn
-	      if (ism330dhcx_acceleration_raw_get(&dev_ctx, data_raw_acceleration) == 0)
-	      {
-	          ax_raw_buf[sample_idx] = data_raw_acceleration[0];
-	          ay_raw_buf[sample_idx] = data_raw_acceleration[1];
-	          az_raw_buf[sample_idx] = data_raw_acceleration[2];
-	          sample_idx++;
+   while (1)
+   {
+       int16_t data_raw_acceleration[3];
 
-	          if (sample_idx >= CNN_TIMESTEPS)
-	          {
-	              convert_to_mg();
+       if (logging_enabled)
+       {
+           if (ism330dhcx_acceleration_raw_get(&dev_ctx, data_raw_acceleration) == 0)
+           {
+               if (sample_idx >= CNN_TIMESTEPS) {
+                   sample_idx = 0;
+               }
 
+               ax_raw_buf[sample_idx] = data_raw_acceleration[0];
+               ay_raw_buf[sample_idx] = data_raw_acceleration[1];
+               az_raw_buf[sample_idx] = data_raw_acceleration[2];
+               sample_idx++;
 
-	              for (int i = 0; i < CNN_TIMESTEPS; i++) {
+               if (sample_idx >= CNN_TIMESTEPS)
+               {
+                   convert_to_mg();
 
-	                  cnn_input[i*3 + 0] =
-	                      (ax_mg_buf[i] - CNN_MEAN[0]) / CNN_STD[0];
+                   for (int i = 0; i < CNN_TIMESTEPS; i++) {
+                       cnn_input[i*3 + 0] = (ax_mg_buf[i] - CNN_MEAN[0]) / CNN_STD[0];
+                       cnn_input[i*3 + 1] = (ay_mg_buf[i] - CNN_MEAN[1]) / CNN_STD[1];
+                       cnn_input[i*3 + 2] = (az_mg_buf[i] - CNN_MEAN[2]) / CNN_STD[2];
+                   }
 
-	                  cnn_input[i*3 + 1] =
-	                      (ay_mg_buf[i] - CNN_MEAN[1]) / CNN_STD[1];
+                   uint32_t start_cycles = DWT->CYCCNT;
+                   MX_X_CUBE_AI_Process();
+                   uint32_t end_cycles = DWT->CYCCNT;
 
-	                  cnn_input[i*3 + 2] =
-	                      (az_mg_buf[i] - CNN_MEAN[2]) / CNN_STD[2];
-	              }
+                   latency_ms = (float)(end_cycles - start_cycles)
+                                / 80000000.0f * 1000.0f;
 
-	              uint32_t start_cycles = DWT->CYCCNT;
-	              MX_X_CUBE_AI_Process();
-	              uint32_t end_cycles = DWT->CYCCNT;
+ 	              inference_sample_index += (CNN_TIMESTEPS / 2);
 
-	              latency_ms = (float)(end_cycles - start_cycles)
-	                           / 80000000.0f * 1000.0f;
+                   static uint32_t inf_count = 0;
+                   static uint32_t t0 = 0;
+                   if (t0 == 0) t0 = HAL_GetTick();
+                   inf_count++;
 
-	              static uint32_t inf_count = 0;
-	              static uint32_t t0 = 0;
+                   if ((HAL_GetTick() - t0) >= 1000) {
+                       printf("Throughput: %lu inf/s\r\n", inf_count);
+                       inf_count = 0;
+                       t0 = HAL_GetTick();
+                   }
 
-	                  if (t0 == 0) {
-	                      t0 = HAL_GetTick();
-	                  }
+                   const int stride = CNN_TIMESTEPS / 2;
 
-	                  inf_count++;
+                   memmove(ax_raw_buf, &ax_raw_buf[stride],
+                           (CNN_TIMESTEPS - stride) * sizeof(int16_t));
+                   memmove(ay_raw_buf, &ay_raw_buf[stride],
+                           (CNN_TIMESTEPS - stride) * sizeof(int16_t));
+                   memmove(az_raw_buf, &az_raw_buf[stride],
+                           (CNN_TIMESTEPS - stride) * sizeof(int16_t));
 
-	                  if (HAL_GetTick() - t0 >= 1000) {
-	                      printf("Throughout: %lu inf/s\r\n", inf_count);
-	                      inf_count = 0;
-	                      t0 = HAL_GetTick();
-
-	              int stride = CNN_TIMESTEPS / 2;
-
-	              memmove(ax_raw_buf, &ax_raw_buf[stride],
-	                      (CNN_TIMESTEPS - stride) * sizeof(int16_t));
-	              memmove(ay_raw_buf, &ay_raw_buf[stride],
-	                      (CNN_TIMESTEPS - stride) * sizeof(int16_t));
-	              memmove(az_raw_buf, &az_raw_buf[stride],
-	                      (CNN_TIMESTEPS - stride) * sizeof(int16_t));
-
-	              sample_idx = CNN_TIMESTEPS - stride;
-	          }
-
-    /* USER CODE END WHILE */
-
-
-    /* USER CODE BEGIN 3 */
-
-	          }
-  /* USER CODE END 3 */
-	      }
+                   sample_idx = CNN_TIMESTEPS - stride;
+               }
+           }
+       }
+   }
 }
-
 
 /**
   * @brief System Clock Configuration
@@ -804,6 +811,8 @@ static void MX_USART1_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART1_Init 2 */
+  HAL_NVIC_SetPriority(USART1_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(USART1_IRQn);
 
   /* USER CODE END USART1_Init 2 */
 
@@ -1041,6 +1050,119 @@ static int32_t platform_read(
         bufp,
         len,
         HAL_MAX_DELAY) == HAL_OK) ? 0 : -1;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+
+	if (huart->Instance != USART1)
+	  {
+		return;
+	  }
+
+/*    if (uart_tx_busy) {
+        HAL_UART_Receive_IT(&huart1, &uart_rx_char, 1);
+        return;
+    }*/
+
+	  char c = uart_rx_char;
+
+	  // Ignore CR
+	  if (c == '\r')
+	  {
+
+	    HAL_UART_Receive_IT(&huart1, &uart_rx_char, 1);
+		return;
+	  }
+
+	  // End of command
+	  if (c == '\n')
+	  {
+	    uart_rx_buf[uart_rx_idx] = '\0';
+
+	     //SKICKA VIDARE – INGEN LOGG HÄR
+	    //printf("RX buf: %s\r\n", uart_rx_buf);
+	    HandleUartCommand(uart_rx_buf);
+	    // RESET BUFFER
+		uart_rx_idx = 0;
+		memset(uart_rx_buf, 0, sizeof(uart_rx_buf));
+	  }
+	  else
+	  {
+	    if (uart_rx_idx < sizeof(uart_rx_buf) - 1)
+	    {
+	      uart_rx_buf[uart_rx_idx++] = c;
+	    }
+	    else
+	    {
+	      // overflow protection
+	      memset(uart_rx_buf, 0, sizeof(uart_rx_buf));
+	      uart_rx_idx = 0;
+	    }
+	  }
+
+	  // ALWAYS restart RX
+	  HAL_UART_Receive_IT(&huart1, &uart_rx_char, 1);
+}
+
+void HandleUartCommand(const char *cmd)
+{
+	//printf("Receive command\r\n");
+  if (strcmp(cmd, "START") == 0)
+  {
+	ResetInferenceState();
+	logging_enabled = 1;
+	//ai_output_enabled = 1;
+
+    //ISM330DHCX_StartSampling();
+    //printf("OK START\r\n");
+  }
+  else if (strcmp(cmd, "STOP") == 0)
+  {
+	    //ai_output_enabled = 0;
+
+	    // Vänta tills UART är HELT klar
+/*	    while (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_TC) == RESET)
+	    {
+	        // vänta
+	    }*/
+
+	    logging_enabled = 0;
+
+	  //ISM330DHCX_StopSampling();
+    //printf("OK STOP\r\n");
+  }
+  else if (strncmp(cmd, "LABEL:", 6) == 0)
+  {
+      const char *label = cmd + 6;   // pekar på texten efter "LABEL:"
+
+      if (strlen(label) > 0 && strlen(label) < sizeof(current_label))
+      {
+          strcpy(current_label, label);
+          //printf("LABEL SET TO: %s\r\n", current_label);
+      }
+  }
+}
+
+static void ResetInferenceState(void)
+{
+    sample_idx = 0;
+
+    memset(ax_raw_buf, 0, sizeof(ax_raw_buf));
+    memset(ay_raw_buf, 0, sizeof(ay_raw_buf));
+    memset(az_raw_buf, 0, sizeof(az_raw_buf));
+
+    memset(ax_mg_buf, 0, sizeof(ax_mg_buf));
+    memset(ay_mg_buf, 0, sizeof(ay_mg_buf));
+    memset(az_mg_buf, 0, sizeof(az_mg_buf));
+
+    memset(cnn_input, 0, sizeof(cnn_input));
+
+    memset(pred_hist, 0, sizeof(pred_hist));
+    pred_idx = 0;
+
+    //MX_X_CUBE_AI_DeInit();
+    MX_X_CUBE_AI_Init();
 }
 
 void convert_to_mg(void) {

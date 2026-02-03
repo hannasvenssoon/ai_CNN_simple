@@ -60,8 +60,15 @@
 /* USER CODE BEGIN includes */
 #define CNN_TIMESTEPS 128
 #define CNN_CHANNELS 3
+#define FS_HZ 3332.0
+#define time_sec (1.0 / FS_HZ)
 
 extern float cnn_input[CNN_TIMESTEPS * CNN_CHANNELS];
+extern char current_label[16];
+extern uint64_t inference_sample_index;
+//extern uint8_t ai_output_enabled;
+
+
 /* USER CODE END includes */
 
 /* IO buffers ----------------------------------------------------------------*/
@@ -216,14 +223,22 @@ int post_process(ai_buffer *buffer)
 	  }
 
 	  const char *labels[] = {"LYING", "STANDING", "MOVING"};
-	  printf("AI Prediktion: %s (%.2f%%)\r\n", labels[class_idx], max_prob * 100.0f);
+	  double ts = inference_sample_index * time_sec;
+	  printf(
+	        "TS:%.3f,GT:%s,PRED:%s,LAT:%.3f\r\n",
+	        ts,
+	        current_label,
+	        labels[class_idx],
+	        latency_ms
+	    );
 
-	  printf("PRED: %d   Latency: %.3f\r\n", class_idx, latency_ms);
+      //printf("Ground truth: %s   AI Prediktion: %s (%.2f%%)   Latency: %.3f\r\n", current_label, labels[class_idx], max_prob * 100.0f, latency_ms);
 
-	  int smooth = smooth_prediction(class_idx);
-	  printf("PRED_SMOOTH: %d\r\n", smooth);
+	  //printf("PRED: %d   Latency: %.3f\r\n", class_idx, latency_ms);
 
-	  return 0;
+/*	  int smooth = smooth_prediction(class_idx);
+	  printf("PRED_SMOOTH: %d\r\n", smooth);*/
+
   /* process the predictions
   for (int idx=0; idx < AI_NETWORK_OUT_NUM; idx++ )
   {
@@ -245,6 +260,7 @@ void MX_X_CUBE_AI_Init(void)
   ai_boostrap(data_activations0);
     /* USER CODE END 5 */
 }
+
 
 void MX_X_CUBE_AI_Process(void)
 {

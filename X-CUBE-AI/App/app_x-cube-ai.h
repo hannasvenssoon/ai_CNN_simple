@@ -29,6 +29,7 @@ void MX_X_CUBE_AI_Init(void);
 void MX_X_CUBE_AI_Process(void);
 /* USER CODE BEGIN includes */
 extern float latency_ms;
+void MX_X_CUBE_AI_DeInit(void);
 /* USER CODE END includes */
 #ifdef __cplusplus
 }

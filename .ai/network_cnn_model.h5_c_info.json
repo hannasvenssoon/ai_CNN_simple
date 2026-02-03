@@ -742,44 +742,44 @@
   ],
   "environment": {
     "generated_model": {
-      "generated_time": "2026-01-21T16:52:15+0100",
+      "generated_time": "2026-01-29T09:05:55+0100",
       "model_files": [
         {
           "name": "network_data_params.h",
-          "signature": "0xa141cd59a415fd35c67907abbb0af540"
+          "signature": "0xd5cabc58fda03561a19dc64c9f0a92b3"
         },
         {
           "name": "network_data_params.c",
-          "signature": "0xeb7c477f3d9907d28bd67bbc7bdf5c1a"
+          "signature": "0x7ecd8287d6a4389354611ed231847d4e"
         },
         {
           "name": "network_data.h",
-          "signature": "0x29b852ba7c5316ba991d29b272a5caa6"
+          "signature": "0x972b84395539c1c20f0a6e3ca649bab4"
         },
         {
           "name": "network_data.c",
-          "signature": "0xb14f46800c8e5354b8fc73faedb176b5"
+          "signature": "0x688852a07ad8444b69ae836096afafb6"
         },
         {
           "name": "network_config.h",
-          "signature": "0x5cd2d8776609fd9cb7923852ff16ac40"
+          "signature": "0x4b877ada97847f866d1833a236674c2c"
         },
         {
           "name": "network.h",
-          "signature": "0x66edc90fd26b25335f7c5efaaccb9c47"
+          "signature": "0x05c64e88d5cca5b472081632aa595b71"
         },
         {
           "name": "network.c",
-          "signature": "0x644b459b572c6c1a659c24ae571f445d"
+          "signature": "0xc3cc95ca4a9bec39b87790425148d14c"
         }
       ],
       "name": "network"
     },
-    "network_signature": "0xd8fb6864813d4965",
+    "network_signature": "0xa2c55e0d35362e08",
     "test_name": "",
     "tools": [
       {
-        "arguments": "generate --target stm32u5 --name network -m C:/Users/HP/OneDrive/Dokument/Universitet/Exam work/i2c_ui_commands/cnn_model.h5 --compression none --verbosity 1 --workspace C:/Users/HP/AppData/Local/Temp/mxAI_workspace759728364340014760201577632469771 --output C:/Users/HP/.stm32cubemx/network_output",
+        "arguments": "analyze --target stm32u5 --name network -m C:/Users/HP/OneDrive/Dokument/Universitet/Exam work/i2c_ui_commands/cnn_model.h5 --compression none --verbosity 1 --workspace C:/Users/HP/AppData/Local/Temp/mxAI_workspace234508746403800465750341194722727 --output C:/Users/HP/.stm32cubemx/network_output",
         "environment": [
           "STATS_TYPE=X-CUBE-AI"
         ],
@@ -787,7 +787,7 @@
           "model_files": [
             {
               "name": "cnn_model.h5",
-              "signature": "0x6f663043714ed385b4aff56cb6fec64b"
+              "signature": "0xda6c0a54cbe14ab4aaeaab6a9ae79832"
             }
           ],
           "n_params": 13411,
